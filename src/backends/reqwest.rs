@@ -124,19 +124,39 @@ impl ReqwestOperation {
     pub fn presigned_urls(&self) -> &[String] {
         &self.presigned_urls
     }
-
     pub const fn presigned_urls_mut(&mut self) -> &mut Vec<String> {
         &mut self.presigned_urls
     }
+    #[must_use]
+    pub fn with_presigned_urls(mut self, urls: Vec<String>) -> Self {
+        self.presigned_urls = urls;
+        self
+    }
 
+    #[must_use]
+    pub const fn progress(&self) -> Option<&Progress> {
+        self.progress.as_ref()
+    }
+    pub const fn progress_mut(&mut self) -> Option<&mut Progress> {
+        self.progress.as_mut()
+    }
     #[must_use]
     pub fn with_progress(mut self, progress: Progress) -> Self {
         self.progress = Some(progress);
         self
     }
+
     #[must_use]
-    pub const fn progress(&self) -> Option<&Progress> {
-        self.progress.as_ref()
+    pub const fn range(&self) -> Option<ByteRange> {
+        self.range
+    }
+    pub const fn range_mut(&mut self) -> Option<&mut ByteRange> {
+        self.range.as_mut()
+    }
+    #[must_use]
+    pub const fn with_range(mut self, range: ByteRange) -> Self {
+        self.range = Some(range);
+        self
     }
 }
 
