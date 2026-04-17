@@ -457,6 +457,100 @@ impl SdkOperation {
         Ok(urls)
     }
 
+    /// Initiates a multipart upload and generates pre-signed PUT URLs for each chunk.
+    ///
+    /// Returns a tuple containing the `UploadId` and an ordered list of pre-signed URLs.
+    /// The `UploadId` must be securely retained on the backend to complete or abort the operation later.
+    #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
+    pub async fn create_presigned_multipart_upload(
+        &self,
+        part_count: usize,
+        expires_in: std::time::Duration,
+    ) -> Result<(String, Vec<String>)> {
+        let client = self.client.clone();
+        let bucket = self.bucket.clone();
+        let key = self.key.clone();
+
+        // 1. Initialize the multipart upload to obtain the authoritative UploadId
+        let upload_id = crate::util::retry::with_retry(
+            || {
+                let client = client.clone();
+                let bucket = bucket.clone();
+                let key = key.clone();
+
+                async move {
+                    let create_res = client
+                        .create_multipart_upload()
+                        .bucket(&bucket)
+                        .key(&key)
+                        .send()
+                        .await
+                        .ctx("Failed to create multipart upload initialization context")?;
+
+                    Ok(create_res
+                        .upload_id()
+                        .ctx("S3 did not return a valid UploadId")?
+                        .to_string())
+                }
+            },
+            &self.retry_config,
+            &self.cancel_token,
+        )
+        .await?;
+
+        // 2. Generate the requested number of pre-signed URLs for the parts
+        let presigning_config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
+            .ctx("Failed to build presigning configuration")?;
+
+        let mut urls = Vec::with_capacity(part_count);
+
+        for part_number in 1..=part_count {
+            let url = crate::util::retry::with_retry(
+                || {
+                    let client = client.clone();
+                    let config = presigning_config.clone();
+                    let bucket = bucket.clone();
+                    let key = key.clone();
+                    let upload_id = upload_id.clone();
+
+                    // S3 part numbers are strictly 1-indexed
+                    let part_num = part_number as i32;
+
+                    async move {
+                        let presigned_req = client
+                            .upload_part()
+                            .bucket(&bucket)
+                            .key(&key)
+                            .upload_id(&upload_id)
+                            .part_number(part_num)
+                            .customize()
+                            // Critical: Strip Content-Length so the frontend isn't forced to match
+                            // an exact byte size in the presigned signature, allowing flexible chunks.
+                            .interceptor(StripContentLengthInterceptor)
+                            .presigned(config)
+                            .await
+                            .ctx("Failed to generate presigned PUT URL for part")?;
+
+                        Ok(presigned_req.uri().to_string())
+                    }
+                },
+                &self.retry_config,
+                &self.cancel_token,
+            )
+            .await?;
+
+            urls.push(url);
+        }
+
+        debug!(
+            parts = urls.len(),
+            %upload_id,
+            "Presigned multipart upload URLs successfully generated"
+        );
+
+        Ok((upload_id, urls))
+    }
+
     /// Prematurely terminates an active S3 multipart upload via explicit abort.
     #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
     pub async fn abort_presigned_multipart_upload(&self, upload_id: &str) -> Result<()> {
