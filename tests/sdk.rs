@@ -96,7 +96,6 @@ mod tests {
             .await
             .unwrap()
             .op(bucket, key)
-            .await
             .expect("Failed to construct SdkClient");
 
         client
@@ -130,7 +129,6 @@ mod tests {
             .unwrap()
             .with_presigned_expires_in(Duration::from_hours(1))
             .op(bucket, key)
-            .await
             .expect("Failed to construct SDK client for presigning");
 
         let presigned_put_url = sdk_client
@@ -190,7 +188,6 @@ mod tests {
             .with_multipart_chunk_size(5 * 1024 * 1024)
             .with_multipart_concurrency(2)
             .op(bucket, key)
-            .await
             .expect("Failed to construct SdkClient");
 
         let etags = client
@@ -226,7 +223,6 @@ mod tests {
             .await
             .unwrap()
             .op(bucket, key)
-            .await
             .unwrap();
 
         // 0-byte payload
@@ -259,7 +255,6 @@ mod tests {
             .await
             .unwrap()
             .op(bucket, key)
-            .await
             .unwrap();
 
         client.put(Bytes::from("Delete me")).await.unwrap();
@@ -293,7 +288,6 @@ mod tests {
             .await
             .unwrap()
             .op(&bucket, format!("{prefix}-init"))
-            .await
             .unwrap();
 
         // Upload 3 items sequentially
@@ -338,7 +332,6 @@ mod tests {
             .await
             .unwrap()
             .op(&bucket, &key)
-            .await
             .unwrap();
 
         base_client.put(Bytes::from("0123456789")).await.unwrap();
@@ -348,7 +341,6 @@ mod tests {
             .unwrap()
             .with_range(ByteRange::Suffix(3)) // Grab the last 3 bytes
             .op(bucket, key)
-            .await
             .unwrap();
 
         let mut writer = InMemoryWriter::new();
@@ -369,7 +361,6 @@ mod tests {
             .await
             .unwrap()
             .op(&bucket, &key)
-            .await
             .unwrap();
 
         base_client.put(Bytes::from("0123456789")).await.unwrap();
@@ -379,7 +370,6 @@ mod tests {
             .unwrap()
             .with_range(ByteRange::From(4)) // Grab bytes 4 through end
             .op(bucket, key)
-            .await
             .unwrap();
 
         let mut writer = InMemoryWriter::new();
@@ -402,7 +392,6 @@ mod tests {
             .unwrap()
             .with_cancel_token(cancel_token)
             .op(bucket, generate_random_key())
-            .await
             .unwrap();
 
         let err = client.put(Bytes::from("Abort me")).await.unwrap_err();
@@ -426,7 +415,6 @@ mod tests {
             .with_cancel_token(cancel_token)
             .with_multipart_chunk_size(5 * 1024 * 1024)
             .op(bucket, generate_random_key())
-            .await
             .unwrap();
 
         // Spawn a thread to cancel the token slightly after the upload starts buffering
@@ -472,7 +460,6 @@ mod tests {
             .await
             .unwrap()
             .op(bucket, key)
-            .await
             .unwrap();
 
         base_client
@@ -528,7 +515,6 @@ mod tests {
             .await
             .unwrap()
             .op(bucket, key)
-            .await
             .unwrap()
             .with_progress(progress.clone());
 

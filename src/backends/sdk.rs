@@ -250,7 +250,7 @@ impl SdkClient {
     /// # Errors
     /// Returns an error if environment variables or core properties are absent/invalid.
     #[instrument(skip(self), err)]
-    pub async fn op(
+    pub fn op(
         &self,
         bucket: impl Into<String> + Debug,
         key: impl Into<String> + Debug,

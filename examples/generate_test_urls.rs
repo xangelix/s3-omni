@@ -27,7 +27,6 @@ async fn main() {
         .unwrap()
         .with_presigned_expires_in(Duration::from_hours(1))
         .op(bucket, key)
-        .await
         .expect("Failed to build SDK Client");
 
     let put_url = sdk_client
