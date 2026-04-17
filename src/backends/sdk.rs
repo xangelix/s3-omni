@@ -457,16 +457,26 @@ impl SdkOperation {
         Ok(urls)
     }
 
-    /// Initiates a multipart upload and generates pre-signed PUT URLs for each chunk.
+    /// Initiates a multipart upload and generates pre-signed PUT URLs for each chunk
+    /// dynamically calculated from the total size and internal chunk configuration.
+    ///
+    /// The `Content-Length` of each part is explicitly calculated and signed to enforce
+    /// strict payload boundaries.
     ///
     /// Returns a tuple containing the `UploadId` and an ordered list of pre-signed URLs.
-    /// The `UploadId` must be securely retained on the backend to complete or abort the operation later.
-    #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
+    #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key, size = total_size), err)]
     pub async fn create_presigned_multipart_upload(
         &self,
-        part_count: usize,
-        expires_in: std::time::Duration,
+        total_size: u64,
     ) -> Result<(String, Vec<String>)> {
+        let presigning_config = self.presigning_config()?;
+
+        let chunk_size = self.multipart_chunk_size;
+
+        // Calculate parts needed, ensuring at least 1 part even for 0-byte payloads
+        let part_count =
+            std::cmp::max(1, (total_size + chunk_size.saturating_sub(1)) / chunk_size) as usize;
+
         let client = self.client.clone();
         let bucket = self.bucket.clone();
         let key = self.key.clone();
@@ -498,13 +508,21 @@ impl SdkOperation {
         )
         .await?;
 
-        // 2. Generate the requested number of pre-signed URLs for the parts
-        let presigning_config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
-            .ctx("Failed to build presigning configuration")?;
-
+        // 2. Generate the exactly sized array of pre-signed URLs for the parts
         let mut urls = Vec::with_capacity(part_count);
 
         for part_number in 1..=part_count {
+            // Calculate the exact payload size expected for this specific chunk
+            let is_last_part = part_number == part_count;
+            let part_size = if is_last_part && total_size > 0 {
+                // The final chunk absorbs the remainder of the bytes
+                total_size - (chunk_size * (part_count as u64 - 1))
+            } else if total_size == 0 {
+                0
+            } else {
+                chunk_size
+            };
+
             let url = crate::util::retry::with_retry(
                 || {
                     let client = client.clone();
@@ -515,6 +533,7 @@ impl SdkOperation {
 
                     // S3 part numbers are strictly 1-indexed
                     let part_num = part_number as i32;
+                    let p_size = part_size as i64; // AWS SDK expects i64 for content_length
 
                     async move {
                         let presigned_req = client
@@ -523,10 +542,7 @@ impl SdkOperation {
                             .key(&key)
                             .upload_id(&upload_id)
                             .part_number(part_num)
-                            .customize()
-                            // Critical: Strip Content-Length so the frontend isn't forced to match
-                            // an exact byte size in the presigned signature, allowing flexible chunks.
-                            .interceptor(StripContentLengthInterceptor)
+                            .content_length(p_size) // Explicitly bind and sign the exact chunk size
                             .presigned(config)
                             .await
                             .ctx("Failed to generate presigned PUT URL for part")?;
@@ -545,7 +561,7 @@ impl SdkOperation {
         debug!(
             parts = urls.len(),
             %upload_id,
-            "Presigned multipart upload URLs successfully generated"
+            "Presigned multipart upload URLs successfully generated and signed"
         );
 
         Ok((upload_id, urls))
