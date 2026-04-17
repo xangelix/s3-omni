@@ -234,7 +234,7 @@ impl SdkClient {
     }
 
     #[must_use]
-    pub fn with_progress(mut self, progress: ProgressStack) -> Self {
+    pub fn with_progress_stack(mut self, progress: ProgressStack) -> Self {
         self.progress_stack = Some(progress);
         self
     }
