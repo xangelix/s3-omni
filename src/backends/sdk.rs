@@ -1001,6 +1001,10 @@ impl ObjectOperation for SdkOperation {
             )
             .await?;
 
+            // Parse the object size from the AWS SDK's content_range
+            let object_size =
+                crate::util::range::parse_object_size_from_content_range(output.content_range());
+
             if let Some(len) = output.content_length() {
                 writer.size_hint(len.try_into().unwrap_or(0)).await?;
             }
@@ -1019,9 +1023,10 @@ impl ObjectOperation for SdkOperation {
                     .ctx("Failed to write chunk sequentially")?;
                 total_written += chunk.len() as u64;
             }
+
             return Ok(S3Return {
                 read_length: total_written,
-                object_size: None,
+                object_size,
             });
         }
 
