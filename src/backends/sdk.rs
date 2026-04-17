@@ -277,10 +277,13 @@ impl SdkClient {
 }
 
 /// A heavy SDK wrapper holding AWS primitives to drive robust transfers.
+#[derive(Clone)]
 pub struct SdkOperation {
     client: Client,
+
     bucket: String,
     key: String,
+
     range: Option<ByteRange>,
     cancel_token: CancellationToken,
     multipart_chunk_size: u64,
