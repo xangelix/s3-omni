@@ -105,6 +105,7 @@ impl ReqwestClient {
 }
 
 /// A lightweight, stateful client executing HTTP operations against S3.
+#[derive(Clone)]
 pub struct ReqwestOperation {
     client: Client,
     progress: Option<Progress>,
