@@ -80,7 +80,7 @@ impl S3Writer for tokio::io::DuplexStream {
 /// The core client trait abstraction for interacting with S3 objects.
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
-pub trait ObjectOperation {
+pub trait ObjectOperation: Clone + MaybeSend + 'static {
     /// Mutates the operation to target a specific byte range.
     #[must_use]
     fn with_range(self, range: ByteRange) -> Self;
