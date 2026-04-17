@@ -77,6 +77,36 @@ impl S3Writer for tokio::io::DuplexStream {
     }
 }
 
+#[async_trait]
+impl S3Writer for tokio::io::Sink {
+    async fn size_hint(&mut self, _size: u64) -> Result<()> {
+        // The void absorbs all, no pre-allocation required.
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<W: S3Writer + Send> S3Writer for tokio::io::BufWriter<W> {
+    async fn size_hint(&mut self, size: u64) -> Result<()> {
+        // Transparently pass the size hint down to the inner writer (e.g., the File)
+        self.get_mut().size_hint(size).await
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[async_trait]
+impl S3Writer for tokio::fs::File {
+    async fn size_hint(&mut self, size: u64) -> Result<()> {
+        // Pre-allocates the file length on the filesystem.
+        // This prevents disk fragmentation during parallel multipart chunk writes
+        // and safely errors out immediately if the disk lacks capacity.
+        self.set_len(size)
+            .await
+            .ctx("Failed to pre-allocate file length on disk")?;
+        Ok(())
+    }
+}
+
 /// The core client trait abstraction for interacting with S3 objects.
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
