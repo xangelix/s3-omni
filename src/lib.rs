@@ -210,3 +210,23 @@ impl From<web_sys::File> for S3Payload {
         }
     }
 }
+
+// 5. From a tokio::fs::File (Native only)
+#[cfg(not(target_family = "wasm"))]
+impl From<tokio::fs::File> for S3Payload {
+    fn from(file: tokio::fs::File) -> Self {
+        use futures::StreamExt as _;
+
+        // ReaderStream automatically handles buffering and yielding Bytes chunks
+        let stream = tokio_util::io::ReaderStream::new(file).map(|res| {
+            res.map_err(|e| Error::Context {
+                context: "Failed to read chunk from file stream",
+                source: Some(Box::new(e)),
+            })
+        });
+
+        Self {
+            inner: Box::pin(stream),
+        }
+    }
+}
