@@ -230,3 +230,18 @@ impl From<tokio::fs::File> for S3Payload {
         }
     }
 }
+
+// 6. From standard Strings
+impl From<String> for S3Payload {
+    fn from(s: String) -> Self {
+        // Recycle the Vec<u8> implementation
+        Self::from(s.into_bytes())
+    }
+}
+
+impl From<&'static str> for S3Payload {
+    fn from(s: &'static str) -> Self {
+        // Recycle the Bytes implementation
+        Self::from(Bytes::from_static(s.as_bytes()))
+    }
+}
