@@ -104,10 +104,7 @@ mod tests {
             .await
             .expect("SDK put_object failed");
 
-        let size = client
-            .get_object_size()
-            .await
-            .expect("SDK get_object_size failed");
+        let size = client.get_size().await.expect("SDK get_object_size failed");
         assert_eq!(size, payload_data.len() as u64);
 
         let mut writer = InMemoryWriter::new();
@@ -203,10 +200,7 @@ mod tests {
 
         assert_eq!(etags.len(), 3, "Expected exactly 3 multipart chunks");
 
-        let size = client
-            .get_object_size()
-            .await
-            .expect("SDK get_object_size failed");
+        let size = client.get_size().await.expect("SDK get_object_size failed");
         assert_eq!(size, payload_size as u64);
 
         let mut writer = InMemoryWriter::new();
@@ -241,7 +235,7 @@ mod tests {
             .await
             .expect("Upload of 0 bytes failed");
 
-        let size = client.get_object_size().await.unwrap();
+        let size = client.get_size().await.unwrap();
         assert_eq!(size, 0, "Object size should be 0");
 
         let mut writer = InMemoryWriter::new();
@@ -271,7 +265,7 @@ mod tests {
         client.put(Bytes::from("Delete me")).await.unwrap();
 
         // Assert it exists
-        assert_eq!(client.get_object_size().await.unwrap(), 9);
+        assert_eq!(client.get_size().await.unwrap(), 9);
 
         // Delete it
         client

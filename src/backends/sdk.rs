@@ -548,44 +548,6 @@ impl SdkOperation {
         Ok(())
     }
 
-    /// Sends a HEAD dispatch to ascertain absolute object byte capacities prior to streaming.
-    #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
-    pub async fn get_object_size(&mut self) -> Result<u64> {
-        let client = self.client.clone();
-        let bucket = self.bucket.clone();
-        let key = self.key.clone();
-
-        let size = crate::util::retry::with_retry(
-            || {
-                let client = client.clone();
-                let bucket = bucket.clone();
-                let key = key.clone();
-                async move {
-                    let head_res = client
-                        .head_object()
-                        .bucket(&bucket)
-                        .key(&key)
-                        .send()
-                        .await
-                        .ctx("Failed to send HEAD request")?;
-
-                    let s = head_res
-                        .content_length()
-                        .ctx("HEAD response missing Content-Length")?
-                        .try_into()
-                        .ctx("Content-Length value is invalid")?;
-                    Ok(s)
-                }
-            },
-            &self.retry_config,
-            &self.cancel_token,
-        )
-        .await?;
-
-        debug!(size, "Acquired object size");
-        Ok(size)
-    }
-
     /// Fetches S3 object keys with optional prefix and pagination bounds.
     #[instrument(skip(self), fields(bucket = %self.bucket), err)]
     pub async fn list(
@@ -707,6 +669,49 @@ pub struct S3ListResult {
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 impl ObjectOperation for SdkOperation {
+    fn with_range(mut self, range: ByteRange) -> Self {
+        self.range = Some(range);
+        self
+    }
+
+    /// Sends a HEAD dispatch to ascertain absolute object byte capacities prior to streaming.
+    #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
+    async fn get_size(&mut self) -> Result<u64> {
+        let client = self.client.clone();
+        let bucket = self.bucket.clone();
+        let key = self.key.clone();
+
+        let size = crate::util::retry::with_retry(
+            || {
+                let client = client.clone();
+                let bucket = bucket.clone();
+                let key = key.clone();
+                async move {
+                    let head_res = client
+                        .head_object()
+                        .bucket(&bucket)
+                        .key(&key)
+                        .send()
+                        .await
+                        .ctx("Failed to send HEAD request")?;
+
+                    let s = head_res
+                        .content_length()
+                        .ctx("HEAD response missing Content-Length")?
+                        .try_into()
+                        .ctx("Content-Length value is invalid")?;
+                    Ok(s)
+                }
+            },
+            &self.retry_config,
+            &self.cancel_token,
+        )
+        .await?;
+
+        debug!(size, "Acquired object size");
+        Ok(size)
+    }
+
     #[instrument(skip(self, body), fields(bucket = %self.bucket, key = %self.key), err)]
     async fn put<I>(&mut self, body: I) -> Result<Vec<String>>
     where

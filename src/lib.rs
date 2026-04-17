@@ -81,6 +81,13 @@ impl S3Writer for tokio::io::DuplexStream {
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 pub trait ObjectOperation {
+    /// Mutates the operation to target a specific byte range.
+    #[must_use]
+    fn with_range(self, range: ByteRange) -> Self;
+
+    /// Retrieves the absolute total size of the object from the remote server.
+    async fn get_size(&mut self) -> Result<u64>;
+
     /// Uploads an object streamingly, automatically scaling to parallel multipart chunks
     /// if the payload exceeds configured chunk boundaries.
     ///

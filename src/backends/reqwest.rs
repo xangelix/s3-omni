@@ -153,16 +153,57 @@ impl ReqwestOperation {
     pub const fn range_mut(&mut self) -> Option<&mut ByteRange> {
         self.range.as_mut()
     }
-    #[must_use]
-    pub const fn with_range(mut self, range: ByteRange) -> Self {
-        self.range = Some(range);
-        self
-    }
 }
 
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 impl ObjectOperation for ReqwestOperation {
+    fn with_range(mut self, range: ByteRange) -> Self {
+        self.range = Some(range);
+        self
+    }
+    #[instrument(skip(self), err)]
+    async fn get_size(&mut self) -> Result<u64> {
+        let url = self
+            .presigned_urls
+            .first()
+            .ctx("No presigned URLs available")?
+            .clone();
+
+        let response = with_retry(
+            || {
+                let req = self
+                    .client
+                    .get(&url)
+                    .header(reqwest::header::RANGE, "bytes=0-0");
+                async move {
+                    let res = req
+                        .send()
+                        .await
+                        .ctx("Failed to fetch size via 0-byte GET")?;
+                    if !res.status().is_success() {
+                        return Err(Error::HttpFailed {
+                            status_code: res.status().as_u16(),
+                            error_text: res.text().await.unwrap_or_default(),
+                        });
+                    }
+                    Ok(res)
+                }
+            },
+            &self.retry_config,
+            &self.cancel_token,
+        )
+        .await?;
+
+        crate::util::range::parse_object_size_from_content_range(
+            response
+                .headers()
+                .get(reqwest::header::CONTENT_RANGE)
+                .and_then(|h| h.to_str().ok()),
+        )
+        .ctx("Server did not return a valid Content-Range header")
+    }
+
     #[instrument(skip(self, body), fields(urls = self.presigned_urls.len()), err)]
     async fn put<I>(&mut self, body: I) -> Result<Vec<String>>
     where
