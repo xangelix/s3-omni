@@ -87,9 +87,9 @@ impl ReqwestClient {
     ///
     /// # Errors
     /// Returns an error if no presigned URLs have been provided.
-    #[instrument(skip(self), err)]
-    pub fn op(&self, presigned_urls: Vec<String>) -> Result<ReqwestOperation> {
-        Ok(ReqwestOperation {
+    #[must_use]
+    pub fn op(&self, presigned_urls: Vec<String>) -> ReqwestOperation {
+        ReqwestOperation {
             client: self.client.clone(),
             progress: self.progress_stack.as_ref().map(|s| s.add_pb("", 0u64)),
 
@@ -100,7 +100,7 @@ impl ReqwestClient {
             multipart_chunk_size: self.multipart_chunk_size,
             multipart_concurrency: self.multipart_concurrency,
             retry_config: self.retry_config.clone(),
-        })
+        }
     }
 }
 

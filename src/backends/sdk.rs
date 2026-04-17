@@ -249,18 +249,17 @@ impl SdkClient {
     ///
     /// # Errors
     /// Returns an error if environment variables or core properties are absent/invalid.
-    #[instrument(skip(self), err)]
     pub fn op(
         &self,
         bucket: impl Into<String> + Debug,
         key: impl Into<String> + Debug,
-    ) -> Result<SdkOperation> {
+    ) -> SdkOperation {
         debug!("Building SdkClient context");
 
         let bucket = bucket.into();
         let key = key.into();
 
-        Ok(SdkOperation {
+        SdkOperation {
             client: self.client.clone(),
             progress: self.progress_stack.as_ref().map(|s| s.add_pb("", 0u64)),
 
@@ -272,7 +271,7 @@ impl SdkClient {
             multipart_concurrency: self.multipart_concurrency,
             presigned_expires_in: self.presigned_expires_in,
             retry_config: self.retry_config.clone(),
-        })
+        }
     }
 }
 

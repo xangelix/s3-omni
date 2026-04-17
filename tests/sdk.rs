@@ -95,8 +95,7 @@ mod tests {
         let mut client = SdkClient::new(endpoint, access_key, secret_key)
             .await
             .unwrap()
-            .op(bucket, key)
-            .expect("Failed to construct SdkClient");
+            .op(bucket, key);
 
         client
             .put(payload_data.clone())
@@ -128,17 +127,14 @@ mod tests {
             .await
             .unwrap()
             .with_presigned_expires_in(Duration::from_hours(1))
-            .op(bucket, key)
-            .expect("Failed to construct SDK client for presigning");
+            .op(bucket, key);
 
         let presigned_put_url = sdk_client
             .create_presigned_upload(payload_data.len() as u64)
             .await
             .expect("Failed to create presigned PUT url");
 
-        let mut reqwest_client = ReqwestClient::new()
-            .op(vec![presigned_put_url])
-            .expect("Failed to build ReqwestClient");
+        let mut reqwest_client = ReqwestClient::new().op(vec![presigned_put_url]);
 
         let payload_len = payload_data.len() as u64;
         reqwest_client
@@ -155,8 +151,7 @@ mod tests {
 
         let mut reqwest_download_client = ReqwestClient::new()
             .with_range(ByteRange::Exact(start, end + 1))
-            .op(vec![presigned_get_url])
-            .expect("Failed to build ReqwestClient for downloading");
+            .op(vec![presigned_get_url]);
 
         let mut writer = InMemoryWriter::new();
         let s3_return = reqwest_download_client
@@ -187,8 +182,7 @@ mod tests {
             .unwrap()
             .with_multipart_chunk_size(5 * 1024 * 1024)
             .with_multipart_concurrency(2)
-            .op(bucket, key)
-            .expect("Failed to construct SdkClient");
+            .op(bucket, key);
 
         let etags = client
             .put(payload_bytes.clone())
@@ -222,8 +216,7 @@ mod tests {
         let mut client = SdkClient::new(&endpoint, access_key, secret_key)
             .await
             .unwrap()
-            .op(bucket, key)
-            .unwrap();
+            .op(bucket, key);
 
         // 0-byte payload
         client
@@ -254,8 +247,7 @@ mod tests {
         let mut client = SdkClient::new(&endpoint, access_key, secret_key)
             .await
             .unwrap()
-            .op(bucket, key)
-            .unwrap();
+            .op(bucket, key);
 
         client.put(Bytes::from("Delete me")).await.unwrap();
 
@@ -287,8 +279,7 @@ mod tests {
         let client = SdkClient::new(&endpoint, access_key, secret_key)
             .await
             .unwrap()
-            .op(&bucket, format!("{prefix}-init"))
-            .unwrap();
+            .op(&bucket, format!("{prefix}-init"));
 
         // Upload 3 items sequentially
         for i in 1..=3 {
@@ -331,8 +322,7 @@ mod tests {
         let mut base_client = SdkClient::new(&endpoint, &access_key, &secret_key)
             .await
             .unwrap()
-            .op(&bucket, &key)
-            .unwrap();
+            .op(&bucket, &key);
 
         base_client.put(Bytes::from("0123456789")).await.unwrap();
 
@@ -340,8 +330,7 @@ mod tests {
             .await
             .unwrap()
             .with_range(ByteRange::Suffix(3)) // Grab the last 3 bytes
-            .op(bucket, key)
-            .unwrap();
+            .op(bucket, key);
 
         let mut writer = InMemoryWriter::new();
         let res = range_client.get(&mut writer, None).await.unwrap();
@@ -360,8 +349,7 @@ mod tests {
         let mut base_client = SdkClient::new(&endpoint, &access_key, &secret_key)
             .await
             .unwrap()
-            .op(&bucket, &key)
-            .unwrap();
+            .op(&bucket, &key);
 
         base_client.put(Bytes::from("0123456789")).await.unwrap();
 
@@ -369,8 +357,7 @@ mod tests {
             .await
             .unwrap()
             .with_range(ByteRange::From(4)) // Grab bytes 4 through end
-            .op(bucket, key)
-            .unwrap();
+            .op(bucket, key);
 
         let mut writer = InMemoryWriter::new();
         let res = range_client.get(&mut writer, None).await.unwrap();
@@ -391,8 +378,7 @@ mod tests {
             .await
             .unwrap()
             .with_cancel_token(cancel_token)
-            .op(bucket, generate_random_key())
-            .unwrap();
+            .op(bucket, generate_random_key());
 
         let err = client.put(Bytes::from("Abort me")).await.unwrap_err();
         assert!(
@@ -414,8 +400,7 @@ mod tests {
             .unwrap()
             .with_cancel_token(cancel_token)
             .with_multipart_chunk_size(5 * 1024 * 1024)
-            .op(bucket, generate_random_key())
-            .unwrap();
+            .op(bucket, generate_random_key());
 
         // Spawn a thread to cancel the token slightly after the upload starts buffering
         tokio::spawn(async move {
@@ -439,8 +424,7 @@ mod tests {
 
         let mut req_client = ReqwestClient::new()
             .with_cancel_token(cancel_token)
-            .op(vec!["https://fake-s3-endpoint.com/presigned".to_string()])
-            .unwrap();
+            .op(vec!["https://fake-s3-endpoint.com/presigned".to_string()]);
 
         let err = req_client.put(Bytes::from("Data")).await.unwrap_err();
         assert!(matches!(err, s3_omni::error::Error::Cancelled));
@@ -459,8 +443,7 @@ mod tests {
         let mut base_client = SdkClient::new(&endpoint, access_key, secret_key)
             .await
             .unwrap()
-            .op(bucket, key)
-            .unwrap();
+            .op(bucket, key);
 
         base_client
             .put(Bytes::from(payload_data.clone()))
@@ -479,10 +462,7 @@ mod tests {
 
         let urls: Vec<String> = parts.into_iter().map(|(_, _, url)| url).collect();
 
-        let mut req_client = ReqwestClient::new()
-            .with_multipart_concurrency(2)
-            .op(urls)
-            .unwrap();
+        let mut req_client = ReqwestClient::new().with_multipart_concurrency(2).op(urls);
 
         let mut writer = InMemoryWriter::new();
         let res = req_client
@@ -515,7 +495,6 @@ mod tests {
             .await
             .unwrap()
             .op(bucket, key)
-            .unwrap()
             .with_progress(progress.clone());
 
         let payload = Bytes::from("Testing progress injection");
