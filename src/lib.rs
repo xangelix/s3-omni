@@ -53,6 +53,30 @@ pub trait S3Writer: AsyncWrite + Unpin + MaybeSend {
     async fn size_hint(&mut self, size: u64) -> Result<()>;
 }
 
+#[async_trait]
+impl S3Writer for std::io::Cursor<Vec<u8>> {
+    async fn size_hint(&mut self, size: u64) -> Result<()> {
+        self.get_mut().reserve(size as usize);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl S3Writer for std::io::Cursor<&mut Vec<u8>> {
+    async fn size_hint(&mut self, size: u64) -> Result<()> {
+        self.get_mut().reserve(size as usize);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl S3Writer for tokio::io::DuplexStream {
+    async fn size_hint(&mut self, _size: u64) -> Result<()> {
+        // Duplex streams are fixed-capacity pipes, so pre-allocation isn't applicable.
+        Ok(())
+    }
+}
+
 /// The core client trait abstraction for interacting with S3 objects.
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
