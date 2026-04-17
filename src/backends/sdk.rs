@@ -4,6 +4,7 @@ use std::{
     fmt::Debug,
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -25,9 +26,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, trace};
 
 use crate::{
-    ByteRange, DEFAULT_MULTIPART_CHUNK_SIZE, DEFAULT_MULTIPART_CONCURRENCY, Error,
-    ErrorContextExt as _, MaybeSend, ObjectOperation, ProgressGuard, Result, RetryConfig,
-    S3Payload, S3Return, S3Writer,
+    ByteRange, DEFAULT_MULTIPART_CHUNK_SIZE, DEFAULT_MULTIPART_CONCURRENCY,
+    DEFAULT_PRESIGNED_EXPIRES_IN, Error, ErrorContextExt as _, MaybeSend, ObjectOperation,
+    ProgressGuard, Result, RetryConfig, S3Payload, S3Return, S3Writer,
 };
 
 /// Interceptor that safely injects a progress-tracking wrapper around the S3 request body.
@@ -137,7 +138,7 @@ pub struct SdkClient {
     cancel_token: CancellationToken,
     multipart_chunk_size: u64,
     multipart_concurrency: usize,
-    presigned_expires_in: Option<std::time::Duration>,
+    presigned_expires_in: Duration,
 
     retry_config: RetryConfig,
 }
@@ -183,7 +184,7 @@ impl SdkClient {
             cancel_token,
             multipart_chunk_size: DEFAULT_MULTIPART_CHUNK_SIZE,
             multipart_concurrency: DEFAULT_MULTIPART_CONCURRENCY,
-            presigned_expires_in: None,
+            presigned_expires_in: DEFAULT_PRESIGNED_EXPIRES_IN,
 
             retry_config: RetryConfig::default(),
         })
@@ -198,7 +199,7 @@ impl SdkClient {
             cancel_token: CancellationToken::new(),
             multipart_chunk_size: DEFAULT_MULTIPART_CHUNK_SIZE,
             multipart_concurrency: DEFAULT_MULTIPART_CONCURRENCY,
-            presigned_expires_in: None,
+            presigned_expires_in: DEFAULT_PRESIGNED_EXPIRES_IN,
             retry_config: RetryConfig::default(),
         }
     }
@@ -228,8 +229,8 @@ impl SdkClient {
     }
 
     #[must_use]
-    pub const fn with_presigned_expires_in(mut self, duration: std::time::Duration) -> Self {
-        self.presigned_expires_in = Some(duration);
+    pub const fn with_presigned_expires_in(mut self, duration: Duration) -> Self {
+        self.presigned_expires_in = duration;
         self
     }
 
@@ -287,7 +288,7 @@ pub struct SdkOperation {
     cancel_token: CancellationToken,
     multipart_chunk_size: u64,
     multipart_concurrency: usize,
-    presigned_expires_in: Option<std::time::Duration>,
+    presigned_expires_in: Duration,
     progress: Option<Progress>,
     retry_config: RetryConfig,
 }
@@ -346,13 +347,9 @@ impl SdkOperation {
 
     /// Evaluates standard presigning logic tied to local configuration duration.
     pub fn presigning_config(&self) -> Result<PresigningConfig> {
-        let duration = self
-            .presigned_expires_in
-            .ctx("Presigned URL expiration duration is required")?;
-
         PresigningConfig::builder()
             .start_time(std::time::SystemTime::now())
-            .expires_in(duration)
+            .expires_in(self.presigned_expires_in)
             .build()
             .ctx("Failed to build presigning configuration")
     }
@@ -398,7 +395,7 @@ impl SdkOperation {
     pub async fn create_presigned_multipart_download(
         &self,
         total_size: u64,
-        expires_in: std::time::Duration,
+        expires_in: Duration,
     ) -> Result<Vec<(u64, u64, String)>> {
         let (absolute_start, absolute_end) = self.range.as_ref().map_or_else(
             || (0, total_size.saturating_sub(1)),

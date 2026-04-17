@@ -31,6 +31,9 @@ pub const DEFAULT_MULTIPART_CHUNK_SIZE: u64 = 8 * 1024 * 1024;
 /// Default concurrency limit for multipart parallel tasks.
 pub const DEFAULT_MULTIPART_CONCURRENCY: usize = 4;
 
+/// Default expiration duration for presigned URLs.
+pub const DEFAULT_PRESIGNED_EXPIRES_IN: std::time::Duration = std::time::Duration::from_hours(1);
+
 /// The metadata returned from a successful S3 download sequence.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct S3Return {
