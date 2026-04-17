@@ -60,6 +60,12 @@ impl ReqwestClient {
     }
 
     #[must_use]
+    pub fn with_progress_stack(mut self, progress: ProgressStack) -> Self {
+        self.progress_stack = Some(progress);
+        self
+    }
+
+    #[must_use]
     pub fn with_cancel_token(mut self, token: CancellationToken) -> Self {
         self.cancel_token = token;
         self
