@@ -313,6 +313,20 @@ impl SdkOperation {
     }
 
     #[must_use]
+    pub const fn range(&self) -> Option<&ByteRange> {
+        self.range.as_ref()
+    }
+    pub const fn range_mut(&mut self) -> &mut Option<ByteRange> {
+        &mut self.range
+    }
+    /// Mutates the byte range for this specific operation context.
+    #[must_use]
+    pub const fn with_range(mut self, range: ByteRange) -> Self {
+        self.range = Some(range);
+        self
+    }
+
+    #[must_use]
     pub fn with_progress(mut self, progress: Progress) -> Self {
         self.progress = Some(progress);
         self
