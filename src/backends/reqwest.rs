@@ -211,7 +211,7 @@ impl ObjectOperation for ReqwestOperation {
     }
 
     #[instrument(skip(self, body), fields(urls = self.presigned_urls.len()), err)]
-    async fn put<I>(&mut self, body: I) -> Result<Vec<String>>
+    async fn put<I>(&mut self, body: I) -> Result<Vec<(i32, String)>>
     where
         I: Into<S3Payload> + MaybeSend + 'static,
     {
@@ -265,7 +265,7 @@ impl ObjectOperation for ReqwestOperation {
                     .unwrap_or("")
                     .to_string();
                 debug!("Reqwest PUT upload finalized natively");
-                return Ok(vec![etag]);
+                return Ok(vec![(1, etag)]);
             }
 
             #[cfg(target_family = "wasm")]
@@ -378,7 +378,7 @@ impl ObjectOperation for ReqwestOperation {
                 ).await?;
 
                 debug!("Reqwest PUT upload finalized via WASM");
-                return Ok(vec![etag]);
+                return Ok(vec![(1, etag)]);
             }
         }
 
@@ -470,13 +470,12 @@ impl ObjectOperation for ReqwestOperation {
         }
 
         etags.sort_by_key(|k| k.0);
-        let ordered_etags = etags.into_iter().map(|(_, etag)| etag).collect();
 
         debug!(
             parts = current_part_number - 1,
             "Completed multipart presigned pool"
         );
-        Ok(ordered_etags)
+        Ok(etags)
     }
 
     #[instrument(skip(self, writer), fields(urls = self.presigned_urls.len()), err)]
@@ -672,11 +671,11 @@ impl ObjectOperation for ReqwestOperation {
 async fn upload_part_reqwest(
     client: reqwest::Client,
     url: String,
-    part_number: usize,
+    part_number: i32,
     payload: bytes::Bytes,
     retry_config: RetryConfig,
     cancel_token: CancellationToken,
-) -> Result<(usize, String)> {
+) -> Result<(i32, String)> {
     with_retry(
         || {
             let client_ref = &client;

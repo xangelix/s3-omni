@@ -712,7 +712,7 @@ impl ObjectOperation for SdkOperation {
     }
 
     #[instrument(skip(self, body), fields(bucket = %self.bucket, key = %self.key), err)]
-    async fn put<I>(&mut self, body: I) -> Result<Vec<String>>
+    async fn put<I>(&mut self, body: I) -> Result<Vec<(i32, String)>>
     where
         I: Into<S3Payload> + MaybeSend + 'static,
     {
@@ -781,7 +781,7 @@ impl ObjectOperation for SdkOperation {
             .await?;
 
             debug!("Standard PUT upload complete");
-            return Ok(vec![etag]);
+            return Ok(vec![(1, etag)]);
         }
 
         // --- Multipart Pivot ---
@@ -962,7 +962,7 @@ impl ObjectOperation for SdkOperation {
         self.complete_presigned_multipart_upload(&upload_id, etags.clone())
             .await?;
 
-        Ok(etags.into_iter().map(|(_, e)| e).collect())
+        Ok(etags)
     }
 
     #[instrument(skip(self, writer), fields(bucket = %self.bucket, key = %self.key), err)]
