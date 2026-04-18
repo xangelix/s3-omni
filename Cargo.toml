@@ -53,7 +53,7 @@ tracing = "0.1"
 # sdk
 aws-config = { version = "1", default-features = false, optional = true }
 aws-sdk-s3 = { version = "1", features = [
-    "rustls",
+    "default-https-client",
 ], default-features = false, optional = true }
 aws-smithy-types = { version = "1", default-features = false, optional = true }
 http-body = { version = "1", default-features = false, optional = true }
