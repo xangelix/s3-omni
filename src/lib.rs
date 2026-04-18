@@ -128,7 +128,7 @@ pub trait ObjectOperation: Clone + MaybeSend + 'static {
     /// # Errors
     /// Returns an error on network failure, server rejection, or user cancellation.
     /// Yields an ordered list of `ETags` on success (1 `ETag` for single uploads, N for multipart).
-    async fn put<I>(&mut self, body: I) -> Result<Vec<(i32, String)>>
+    async fn put<I>(&mut self, body: I) -> Result<Option<backends::UploadCompletion>>
     where
         I: Into<S3Payload> + MaybeSend + 'static;
 

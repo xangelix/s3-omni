@@ -182,12 +182,10 @@ mod tests {
             .with_multipart_concurrency(2)
             .op(bucket, key);
 
-        let etags = client
+        client
             .put(payload_bytes.clone())
             .await
             .expect("SDK unified put_object failed");
-
-        assert_eq!(etags.len(), 3, "Expected exactly 3 multipart chunks");
 
         let size = client.get_size().await.expect("SDK get_object_size failed");
         assert_eq!(size, payload_size as u64);

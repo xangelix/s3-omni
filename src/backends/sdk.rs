@@ -822,7 +822,7 @@ impl ObjectOperation for SdkOperation {
     }
 
     #[instrument(skip(self, body), fields(bucket = %self.bucket, key = %self.key), err)]
-    async fn put<I>(&mut self, body: I) -> Result<Vec<(i32, String)>>
+    async fn put<I>(&mut self, body: I) -> Result<Option<super::UploadCompletion>>
     where
         I: Into<S3Payload> + MaybeSend + 'static,
     {
@@ -860,7 +860,7 @@ impl ObjectOperation for SdkOperation {
             let key = self.key.clone();
             let progress = self.progress.clone();
 
-            let etag = crate::util::retry::with_retry(
+            crate::util::retry::with_retry(
                 || {
                     let client = client.clone();
                     let bucket = bucket.clone();
@@ -891,7 +891,7 @@ impl ObjectOperation for SdkOperation {
             .await?;
 
             debug!("Standard PUT upload complete");
-            return Ok(vec![(1, etag)]);
+            return Ok(None);
         }
 
         // --- Multipart Pivot ---
@@ -1072,7 +1072,7 @@ impl ObjectOperation for SdkOperation {
         self.complete_presigned_multipart_upload(&upload_id, etags.clone())
             .await?;
 
-        Ok(etags)
+        Ok(None)
     }
 
     #[instrument(skip(self, writer), fields(bucket = %self.bucket, key = %self.key), err)]

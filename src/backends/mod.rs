@@ -66,3 +66,14 @@ pub struct UploadPart {
     pub expected_size: u64,
     pub url: String,
 }
+
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct UploadCompletion {
+    pub upload_id: String,
+    pub etags: Vec<(i32, String)>,
+}

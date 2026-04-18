@@ -225,7 +225,7 @@ impl ObjectOperation for ReqwestOperation {
     }
 
     #[instrument(skip(self, body), err)]
-    async fn put<I>(&mut self, body: I) -> Result<Vec<(i32, String)>>
+    async fn put<I>(&mut self, body: I) -> Result<Option<super::UploadCompletion>>
     where
         I: Into<S3Payload> + MaybeSend + 'static,
     {
@@ -276,14 +276,9 @@ impl ObjectOperation for ReqwestOperation {
                         });
                     }
 
-                    let etag = response
-                        .headers()
-                        .get("ETag")
-                        .and_then(|v| v.to_str().ok())
-                        .unwrap_or("")
-                        .to_string();
                     debug!("Reqwest PUT upload finalized natively");
-                    Ok(vec![(1, etag)])
+
+                    Ok(None)
                 }
 
                 #[cfg(target_family = "wasm")]
@@ -396,7 +391,7 @@ impl ObjectOperation for ReqwestOperation {
                     ).await?;
 
                     debug!("Reqwest PUT upload finalized via WASM");
-                    Ok(vec![(1, etag)])
+                    Ok(None)
                 }
             }
 
@@ -494,7 +489,16 @@ impl ObjectOperation for ReqwestOperation {
 
                 etags.sort_by_key(|k| k.0);
                 debug!(parts = etags.len(), "Completed multipart presigned pool");
-                Ok(etags)
+
+                bundle.upload_id.as_ref().map_or_else(
+                    || Ok(None),
+                    |uid| {
+                        Ok(Some(crate::backends::UploadCompletion {
+                            upload_id: uid.clone(),
+                            etags,
+                        }))
+                    },
+                )
             }
         }
     }
