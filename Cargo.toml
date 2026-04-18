@@ -53,7 +53,6 @@ tracing = "0.1"
 # sdk
 aws-config = { version = "1", default-features = false, optional = true }
 aws-sdk-s3 = { version = "1", features = [
-    "rt-tokio",
     "rustls",
 ], default-features = false, optional = true }
 aws-smithy-types = { version = "1", default-features = false, optional = true }
@@ -62,7 +61,6 @@ http-body = { version = "1", default-features = false, optional = true }
 # reqwest
 reqwest = { version = "0.13", default-features = false, features = [
     "http3",
-    "rustls",
     "stream",
 ], optional = true }
 
@@ -89,3 +87,8 @@ rand = "0.10"
 
 [target.'cfg(target_family = "wasm")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+aws-sdk-s3 = { version = "1", features = [
+    "rt-tokio",
+], default-features = false }
