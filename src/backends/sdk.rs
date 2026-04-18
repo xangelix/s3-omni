@@ -603,26 +603,26 @@ impl SdkOperation {
     }
 
     /// Evaluates collected `ETags` and seals the completed multipart sequence on S3.
-    #[instrument(skip(self, etags), fields(bucket = %self.bucket, key = %self.key), err)]
+    #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
     pub async fn complete_presigned_multipart_upload(
         &self,
-        upload_id: impl Into<String> + Debug,
-        etags: Vec<(i32, String)>,
+        upload_completion: super::UploadCompletion,
     ) -> Result<()> {
         let client = self.client.clone();
         let bucket = self.bucket.clone();
         let key = self.key.clone();
-        let upload_id = upload_id.into();
+        let upload_completion = upload_completion.clone();
 
         crate::util::retry::with_retry(
             || {
                 let client = client.clone();
                 let bucket = bucket.clone();
                 let key = key.clone();
-                let upload_id = upload_id.clone();
-                let etags = etags.clone();
+                let upload_completion = upload_completion.clone();
+
                 async move {
-                    let completed_parts = etags
+                    let completed_parts = upload_completion
+                        .etags
                         .iter()
                         .map(|(part_num, etag)| {
                             aws_sdk_s3::types::CompletedPart::builder()
@@ -640,7 +640,7 @@ impl SdkOperation {
                         .complete_multipart_upload()
                         .bucket(&bucket)
                         .key(&key)
-                        .upload_id(&upload_id)
+                        .upload_id(&upload_completion.upload_id)
                         .multipart_upload(completed_upload)
                         .send()
                         .await
@@ -653,7 +653,7 @@ impl SdkOperation {
         )
         .await?;
 
-        info!(%upload_id, "Multipart upload completed securely");
+        info!(%upload_completion.upload_id, "Multipart upload completed securely");
         Ok(())
     }
 
@@ -1069,7 +1069,8 @@ impl ObjectOperation for SdkOperation {
         etags.sort_by_key(|k| k.0);
 
         info!("Sending complete multipart upload directive");
-        self.complete_presigned_multipart_upload(&upload_id, etags.clone())
+
+        self.complete_presigned_multipart_upload(super::UploadCompletion { upload_id, etags })
             .await?;
 
         Ok(None)
