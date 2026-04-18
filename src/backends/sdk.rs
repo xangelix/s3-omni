@@ -395,7 +395,6 @@ impl SdkOperation {
     pub async fn create_presigned_multipart_download(
         &self,
         total_size: u64,
-        expires_in: Duration,
     ) -> Result<Vec<(u64, u64, String)>> {
         let (absolute_start, absolute_end) = self.range.as_ref().map_or_else(
             || (0, total_size.saturating_sub(1)),
@@ -411,8 +410,7 @@ impl SdkOperation {
         let mut current_start = absolute_start;
         let chunk_size = self.multipart_chunk_size;
 
-        let presigning_config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
-            .ctx("Failed to build presigning configuration")?;
+        let presigning_config = self.presigning_config()?;
 
         let client = self.client.clone();
         let bucket = self.bucket.clone();

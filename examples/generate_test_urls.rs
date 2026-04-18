@@ -34,7 +34,7 @@ async fn main() {
         .expect("Failed to generate PUT URL");
 
     let get_urls = sdk_client
-        .create_presigned_multipart_download(payload_size, Duration::from_hours(1))
+        .create_presigned_multipart_download(payload_size)
         .await
         .expect("Failed to generate GET URLs");
 

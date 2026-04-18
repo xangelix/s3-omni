@@ -143,7 +143,7 @@ mod tests {
             .expect("Reqwest put_object failed");
 
         let download_urls = sdk_client
-            .create_presigned_multipart_download(payload_len, Duration::from_hours(1))
+            .create_presigned_multipart_download(payload_len)
             .await
             .expect("Failed to create presigned download urls");
 
@@ -452,7 +452,7 @@ mod tests {
 
         // Map the payload to multiple presigned parts (e.g. 5MB chunks)
         let parts = base_client
-            .create_presigned_multipart_download(payload_size as u64, Duration::from_hours(1))
+            .create_presigned_multipart_download(payload_size as u64)
             .await
             .unwrap();
         assert!(
