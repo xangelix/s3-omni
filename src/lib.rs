@@ -4,7 +4,7 @@ pub mod backends;
 pub mod error;
 pub mod util;
 
-use std::pin::Pin;
+use std::{pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -254,5 +254,38 @@ impl From<&'static str> for S3Payload {
     fn from(s: &'static str) -> Self {
         // Recycle the Bytes implementation
         Self::from(Bytes::from_static(s.as_bytes()))
+    }
+}
+
+impl From<Arc<[u8]>> for S3Payload {
+    fn from(arc: Arc<[u8]>) -> Self {
+        // Yield 512KB chunks. Your backend lookahead buffers will automatically
+        // coalesce these into the larger `multipart_chunk_size` bounds anyway.
+        let chunk_size = 512 * 1024;
+
+        let stream = futures::stream::unfold((arc, 0), move |(arc, offset)| async move {
+            if offset >= arc.len() {
+                None // Stream exhausted
+            } else {
+                let end = std::cmp::min(offset + chunk_size, arc.len());
+
+                // This is a CPU copy, but your RAM overhead is strictly bounded
+                // to 512KB per active chunk, avoiding a full clone of the Arc.
+                let chunk = Bytes::copy_from_slice(&arc[offset..end]);
+
+                Some((Ok(chunk), (arc, end)))
+            }
+        });
+
+        #[cfg(not(target_family = "wasm"))]
+        return Self {
+            inner: Box::pin(stream),
+        };
+
+        #[cfg(target_family = "wasm")]
+        return Self {
+            // LocalBoxStream avoids Send requirements for WASM
+            inner: Box::pin(stream),
+        };
     }
 }
