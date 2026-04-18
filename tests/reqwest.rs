@@ -92,4 +92,54 @@ mod reqwest_tests {
         assert_eq!(s3_return.read_length, payload.len() as u64);
         assert_eq!(writer.buffer, payload.as_ref());
     }
+
+    // --- WASM SPECIFIC TESTS ---
+
+    #[cfg(target_family = "wasm")]
+    #[wasm_bindgen_test]
+    async fn test_wasm_readable_stream_payload() {
+        let put_url = option_env!("TEST_PRESIGNED_PUT")
+            .map_or_else(|| panic!("Missing PUT URL (Run via tests.sh)"), |url| url);
+
+        let get_url =
+            option_env!("TEST_PRESIGNED_GET").map_or_else(|| panic!("Missing GET URL"), |url| url);
+
+        let start: u64 = option_env!("TEST_RANGE_START")
+            .map_or_else(|| panic!("Missing START"), |val| val.parse().unwrap());
+
+        let end: u64 = option_env!("TEST_RANGE_END")
+            .map_or_else(|| panic!("Missing END"), |val| val.parse().unwrap());
+
+        // MUST be exactly 36 bytes to match the signed URL from generate_test_urls.rs!
+        let payload_str = "Hello from Universal Reqwest Client!";
+
+        // 1. The Trick: Use a JS Response object to effortlessly generate a ReadableStream
+        let response = web_sys::Response::new_with_opt_str(Some(payload_str))
+            .expect("Failed to create JS Response");
+        let readable_stream = response
+            .body()
+            .expect("Failed to get ReadableStream from Response");
+
+        // 2. PUT using the ReadableStream directly!
+        let mut put_client = ReqwestClient::new().op(put_url.to_string());
+
+        put_client
+            .put(readable_stream)
+            .await
+            .expect("Reqwest PUT with ReadableStream failed");
+
+        // 3. GET to verify the stream was consumed and uploaded correctly
+        let mut get_client = ReqwestClient::new()
+            .with_range(ByteRange::Exact(start, end))
+            .op(get_url.to_string());
+
+        let mut writer = MemoryWriter::new();
+        let s3_return = get_client
+            .get(&mut writer, None)
+            .await
+            .expect("Reqwest GET failed");
+
+        assert_eq!(s3_return.read_length, 36);
+        assert_eq!(writer.buffer, payload_str.as_bytes());
+    }
 }

@@ -168,7 +168,6 @@ impl Stream for S3Payload {
     }
 }
 
-// 2. From an in-memory Vec<u8>
 impl From<Vec<u8>> for S3Payload {
     fn from(data: Vec<u8>) -> Self {
         let stream = futures::stream::once(async move { Ok(Bytes::from(data)) });
@@ -178,7 +177,6 @@ impl From<Vec<u8>> for S3Payload {
     }
 }
 
-// 3. From standard Bytes
 impl From<Bytes> for S3Payload {
     fn from(data: Bytes) -> Self {
         let stream = futures::stream::once(async move { Ok(data) });
@@ -188,25 +186,24 @@ impl From<Bytes> for S3Payload {
     }
 }
 
-// 4. From a Browser File (WASM only)
 #[cfg(target_family = "wasm")]
-impl From<web_sys::File> for S3Payload {
-    fn from(file: web_sys::File) -> Self {
+impl From<web_sys::ReadableStream> for S3Payload {
+    fn from(stream: web_sys::ReadableStream) -> Self {
         use futures::StreamExt as _;
         use wasm_streams::ReadableStream;
-        use web_sys::js_sys::Uint8Array;
-        use web_sys::wasm_bindgen::JsCast;
+        use web_sys::{js_sys::Uint8Array, wasm_bindgen::JsCast};
 
-        let js_stream = file.stream();
-        let wasm_stream = ReadableStream::from_raw(js_stream.unchecked_into());
+        // Wrap the raw JS stream into a Rust-friendly stream interface
+        let wasm_stream = ReadableStream::from_raw(stream.unchecked_into());
 
+        // Map the loosely-typed JS chunks into strict Rust `Bytes`
         let mapped_stream = wasm_stream.into_stream().map(|js_result| match js_result {
             Ok(js_val) => {
                 let array = js_val.unchecked_into::<Uint8Array>();
                 Ok(Bytes::from(array.to_vec()))
             }
             Err(_) => Err(Error::Context {
-                context: "Failed to read chunk from browser File stream",
+                context: "Failed to read chunk from browser ReadableStream",
                 source: None,
             }),
         });
@@ -217,7 +214,16 @@ impl From<web_sys::File> for S3Payload {
     }
 }
 
-// 5. From a tokio::fs::File (Native only)
+#[cfg(target_family = "wasm")]
+impl From<web_sys::File> for S3Payload {
+    fn from(file: web_sys::File) -> Self {
+        use web_sys::wasm_bindgen::JsCast;
+
+        // file.stream() exposes the underlying file data as a stream.
+        Self::from(file.stream().unchecked_into::<web_sys::ReadableStream>())
+    }
+}
+
 #[cfg(not(target_family = "wasm"))]
 impl From<tokio::fs::File> for S3Payload {
     fn from(file: tokio::fs::File) -> Self {
@@ -237,7 +243,6 @@ impl From<tokio::fs::File> for S3Payload {
     }
 }
 
-// 6. From standard Strings
 impl From<String> for S3Payload {
     fn from(s: String) -> Self {
         // Recycle the Vec<u8> implementation
