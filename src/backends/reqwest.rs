@@ -310,7 +310,7 @@ impl ObjectOperation for ReqwestOperation {
                     let payload = buffered_bytes.freeze();
 
                     // Because WASM single-part buffers fully into memory, we CAN retry it.
-                    let etag = with_retry(
+                    with_retry(
                         || {
                             let url_ref = &url;
                             let payload_clone = payload.clone();
