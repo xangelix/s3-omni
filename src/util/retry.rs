@@ -129,7 +129,7 @@ where
                     attempt,
                     max_attempts = config.max_attempts,
                     delay_secs = sleep_secs,
-                    error = %err,
+                    error = ?err,
                     "Transient S3 failure encountered, initiating retry"
                 );
 
