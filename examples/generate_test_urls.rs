@@ -20,7 +20,7 @@ async fn main() {
             .unwrap()
             .as_secs()
     );
-    let payload_size = 40; // Size of our test string
+    let payload_size = 36; // Size of our test string
 
     let sdk_client = SdkClient::new(endpoint, access_key, secret_access_key)
         .await
@@ -28,17 +28,24 @@ async fn main() {
         .with_presigned_expires_in(Duration::from_hours(1))
         .op(bucket, key);
 
-    let put_url = sdk_client
+    // 1. Generate the Upload Struct and extract the first part's URL
+    let presigned_upload = sdk_client
         .create_presigned_upload(payload_size)
         .await
         .expect("Failed to generate PUT URL");
 
-    let get_urls = sdk_client
-        .create_presigned_multipart_download(payload_size)
+    let put_url = presigned_upload.parts.into_iter().next().unwrap().url;
+
+    // 2. Generate the Download Struct and extract the first part's URL and bounds
+    let presigned_download = sdk_client
+        .create_presigned_download(payload_size)
         .await
         .expect("Failed to generate GET URLs");
 
-    let (start, end, get_url) = get_urls[0].clone();
+    let download_part = presigned_download.parts.into_iter().next().unwrap();
+    let get_url = download_part.url;
+    let start = download_part.start;
+    let end = download_part.end;
 
     // Print strictly the export commands so our bash script can evaluate them
     println!("export TEST_PRESIGNED_PUT='{put_url}'");

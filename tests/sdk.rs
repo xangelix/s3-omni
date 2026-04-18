@@ -10,7 +10,9 @@ mod tests {
     use async_trait::async_trait;
     use bytes::Bytes;
     use rand::{RngExt as _, distr::Alphanumeric};
-    use s3_omni::{ObjectOperation as _, ReqwestClient, S3Writer, SdkClient};
+    use s3_omni::{
+        ObjectOperation as _, ReqwestClient, S3Writer, SdkClient, backends::PresignedUpload,
+    };
     use tokio::io::AsyncWrite;
     use tokio_util::sync::CancellationToken;
 
@@ -129,12 +131,12 @@ mod tests {
             .with_presigned_expires_in(Duration::from_hours(1))
             .op(bucket, key);
 
-        let presigned_put_url = sdk_client
+        let presigned_upload = sdk_client
             .create_presigned_upload(payload_data.len() as u64)
             .await
             .expect("Failed to create presigned PUT url");
 
-        let mut reqwest_client = ReqwestClient::new().op(vec![presigned_put_url]);
+        let mut reqwest_client = ReqwestClient::new().op(presigned_upload);
 
         let payload_len = payload_data.len() as u64;
         reqwest_client
@@ -142,16 +144,12 @@ mod tests {
             .await
             .expect("Reqwest put_object failed");
 
-        let download_urls = sdk_client
-            .create_presigned_multipart_download(payload_len)
+        let presigned_download = sdk_client
+            .create_presigned_download(payload_len)
             .await
             .expect("Failed to create presigned download urls");
 
-        let (start, end, presigned_get_url) = download_urls[0].clone();
-
-        let mut reqwest_download_client = ReqwestClient::new()
-            .with_range(ByteRange::Exact(start, end + 1))
-            .op(vec![presigned_get_url]);
+        let mut reqwest_download_client = ReqwestClient::new().op(presigned_download);
 
         let mut writer = InMemoryWriter::new();
         let s3_return = reqwest_download_client
@@ -422,9 +420,17 @@ mod tests {
         let cancel_token = CancellationToken::new();
         cancel_token.cancel(); // Abort immediately
 
-        let mut req_client = ReqwestClient::new()
-            .with_cancel_token(cancel_token)
-            .op(vec!["https://fake-s3-endpoint.com/presigned".to_string()]);
+        let mut req_client =
+            ReqwestClient::new()
+                .with_cancel_token(cancel_token)
+                .op(PresignedUpload {
+                    upload_id: None,
+                    parts: vec![s3_omni::UploadPart {
+                        part_number: 1,
+                        expected_size: 5,
+                        url: "http://example.com".to_string(),
+                    }],
+                });
 
         let err = req_client.put(Bytes::from("Data")).await.unwrap_err();
         assert!(matches!(err, s3_omni::error::Error::Cancelled));
@@ -451,18 +457,18 @@ mod tests {
             .unwrap();
 
         // Map the payload to multiple presigned parts (e.g. 5MB chunks)
-        let parts = base_client
-            .create_presigned_multipart_download(payload_size as u64)
+        let presigned_download = base_client
+            .create_presigned_download(payload_size as u64)
             .await
             .unwrap();
         assert!(
-            parts.len() >= 2,
+            presigned_download.parts.len() >= 2,
             "Expected multiple parts to test reqwest concurrent fetching"
         );
 
-        let urls: Vec<String> = parts.into_iter().map(|(_, _, url)| url).collect();
-
-        let mut req_client = ReqwestClient::new().with_multipart_concurrency(2).op(urls);
+        let mut req_client = ReqwestClient::new()
+            .with_multipart_concurrency(2)
+            .op(presigned_download);
 
         let mut writer = InMemoryWriter::new();
         let res = req_client

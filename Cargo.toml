@@ -29,7 +29,6 @@ sdk = [
     "tokio/rt-multi-thread",
 ]
 reqwest = ["dep:reqwest", "wasm-bindgen-futures", "wasm-streams", "web-sys"]
-aws-sdk-s3 = ["dep:aws-sdk-s3"]
 
 [dependencies]
 async-trait = "0.1"
@@ -43,16 +42,15 @@ tokio = { version = "1", default-features = false, features = [
     "time",
 ] }
 tokio-util = { version = "0", default-features = false }
-tokio_with_wasm = { version = "0.9", features = [
-    "rt",
-    "rt-multi-thread",
-    "time",
-], default-features = false }
+tokio_with_wasm = { version = "0.9", features = ["macros", "rt", "rt-multi-thread", "time"], default-features = false }
 tracing = "0.1"
 
 # sdk
 aws-config = { version = "1", default-features = false, optional = true }
-aws-sdk-s3 = { version = "1", features = ["rt-tokio", "rustls"], default-features = false, optional = true }
+aws-sdk-s3 = { version = "1", features = [
+    "rt-tokio",
+    "rustls",
+], default-features = false, optional = true }
 aws-smithy-types = { version = "1", default-features = false, optional = true }
 http-body = { version = "1", default-features = false, optional = true }
 
@@ -61,6 +59,14 @@ reqwest = { version = "0.13", default-features = false, features = [
     "rustls",
     "stream",
 ], optional = true }
+
+# rkyv
+rkyv = { version = "0.8", features = [
+    "std",
+], default-features = false, optional = true }
+
+# serde
+serde = { version = "1", features = ["derive"], optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 # reqwest

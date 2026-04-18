@@ -71,7 +71,7 @@ mod reqwest_tests {
         let payload = Bytes::from("Hello from Universal Reqwest Client!");
 
         // 1. PUT
-        let mut put_client = ReqwestClient::new().op(vec![put_url.to_string()]);
+        let mut put_client = ReqwestClient::new().op(put_url.to_string());
 
         put_client
             .put(payload.clone())
@@ -81,7 +81,7 @@ mod reqwest_tests {
         // 2. GET
         let mut get_client = ReqwestClient::new()
             .with_range(ByteRange::Exact(start, end))
-            .op(vec![get_url.to_string()]);
+            .op(get_url.to_string());
 
         let mut writer = MemoryWriter::new();
         let s3_return = get_client

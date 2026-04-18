@@ -354,48 +354,12 @@ impl SdkOperation {
             .ctx("Failed to build presigning configuration")
     }
 
-    /// Generates a singular pre-signed URL capable of ingesting streaming bodies.
-    #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
-    pub async fn create_presigned_upload(
-        &self,
-        _content_length: u64, // Keep for trait/API compatibility, but ignore it
-    ) -> Result<String> {
-        let config = self.presigning_config()?;
-        let client = self.client.clone();
-        let bucket = self.bucket.clone();
-        let key = self.key.clone();
-
-        crate::util::retry::with_retry(
-            || {
-                let client = client.clone();
-                let config = config.clone();
-                let bucket = bucket.clone();
-                let key = key.clone();
-                async move {
-                    let presigned_req = client
-                        .put_object()
-                        .bucket(&bucket)
-                        .key(&key)
-                        .customize()
-                        .interceptor(StripContentLengthInterceptor)
-                        .presigned(config)
-                        .await
-                        .ctx("Failed to create presigned upload URL")?;
-                    Ok(presigned_req.uri().to_string())
-                }
-            },
-            &self.retry_config,
-            &self.cancel_token,
-        )
-        .await
-    }
-
     /// Initiates a multipart pseudo-upload process and maps it to chunked presigned GET ranges.
     #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key), err)]
-    pub async fn create_presigned_multipart_download(
+    pub async fn create_presigned_download(
         &self,
         total_size: u64,
-    ) -> Result<Vec<(u64, u64, String)>> {
+    ) -> Result<super::PresignedDownload> {
         let (absolute_start, absolute_end) = self.range.as_ref().map_or_else(
             || (0, total_size.saturating_sub(1)),
             |r| r.resolve_bounds(total_size),
@@ -406,7 +370,7 @@ impl SdkOperation {
             return Err(Error::InvalidRange);
         }
 
-        let mut urls = Vec::new();
+        let mut parts = Vec::new();
         let mut current_start = absolute_start;
         let chunk_size = self.multipart_chunk_size;
 
@@ -444,12 +408,19 @@ impl SdkOperation {
             )
             .await?;
 
-            urls.push((current_start, part_end, url));
+            parts.push(super::DownloadPart {
+                start: current_start,
+                end: part_end,
+                url,
+            });
             current_start = part_end + 1;
         }
 
-        debug!(parts = urls.len(), "Presigned multipart download generated");
-        Ok(urls)
+        debug!(
+            parts = parts.len(),
+            "Presigned multipart download generated"
+        );
+        Ok(super::PresignedDownload { total_size, parts })
     }
 
     /// Initiates a multipart upload and generates pre-signed PUT URLs for each chunk
@@ -460,23 +431,55 @@ impl SdkOperation {
     ///
     /// Returns a tuple containing the `UploadId` and an ordered list of pre-signed URLs.
     #[instrument(skip(self), fields(bucket = %self.bucket, key = %self.key, size = total_size), err)]
-    pub async fn create_presigned_multipart_upload(
-        &self,
-        total_size: u64,
-    ) -> Result<(String, Vec<String>)> {
+    pub async fn create_presigned_upload(&self, total_size: u64) -> Result<super::PresignedUpload> {
         let presigning_config = self.presigning_config()?;
-
         let chunk_size = self.multipart_chunk_size;
-
-        // Calculate parts needed, ensuring at least 1 part even for 0-byte payloads
-        let part_count =
-            std::cmp::max(1, (total_size + chunk_size.saturating_sub(1)) / chunk_size) as usize;
-
         let client = self.client.clone();
         let bucket = self.bucket.clone();
         let key = self.key.clone();
 
-        // 1. Initialize the multipart upload to obtain the authoritative UploadId
+        // --- DYNAMIC PIVOT: SINGLE PART ---
+        if total_size <= chunk_size {
+            info!("Payload within chunk limits, generating standard PutObject URL");
+
+            let url = crate::util::retry::with_retry(
+                || {
+                    let client = client.clone();
+                    let config = presigning_config.clone();
+                    let bucket = bucket.clone();
+                    let key = key.clone();
+
+                    async move {
+                        let presigned_req = client
+                            .put_object()
+                            .bucket(&bucket)
+                            .key(&key)
+                            .content_length(total_size as i64) // Bind the exact size for security
+                            .presigned(config)
+                            .await
+                            .ctx("Failed to generate presigned standard PUT URL")?;
+                        Ok(presigned_req.uri().to_string())
+                    }
+                },
+                &self.retry_config,
+                &self.cancel_token,
+            )
+            .await?;
+
+            return Ok(super::PresignedUpload {
+                upload_id: None,
+                parts: vec![super::UploadPart {
+                    part_number: 1,
+                    expected_size: total_size,
+                    url,
+                }],
+            });
+        }
+
+        // --- DYNAMIC PIVOT: MULTIPART ---
+        info!("Payload exceeds chunk bounds, generating multipart UploadPart URLs");
+        let part_count = total_size.div_ceil(chunk_size) as usize;
+
         let upload_id = crate::util::retry::with_retry(
             || {
                 let client = client.clone();
@@ -490,12 +493,9 @@ impl SdkOperation {
                         .key(&key)
                         .send()
                         .await
-                        .ctx("Failed to create multipart upload initialization context")?;
+                        .ctx("Failed to initialize multipart context")?;
 
-                    Ok(create_res
-                        .upload_id()
-                        .ctx("S3 did not return a valid UploadId")?
-                        .to_string())
+                    Ok(create_res.upload_id().ctx("Missing UploadId")?.to_string())
                 }
             },
             &self.retry_config,
@@ -504,7 +504,7 @@ impl SdkOperation {
         .await?;
 
         // 2. Generate the exactly sized array of pre-signed URLs for the parts
-        let mut urls = Vec::with_capacity(part_count);
+        let mut parts = Vec::with_capacity(part_count);
 
         for part_number in 1..=part_count {
             // Calculate the exact payload size expected for this specific chunk
@@ -512,8 +512,6 @@ impl SdkOperation {
             let part_size = if is_last_part && total_size > 0 {
                 // The final chunk absorbs the remainder of the bytes
                 total_size - (chunk_size * (part_count as u64 - 1))
-            } else if total_size == 0 {
-                0
             } else {
                 chunk_size
             };
@@ -550,16 +548,23 @@ impl SdkOperation {
             )
             .await?;
 
-            urls.push(url);
+            parts.push(super::UploadPart {
+                part_number: part_number as i32,
+                expected_size: part_size,
+                url,
+            });
         }
 
         debug!(
-            parts = urls.len(),
+            parts = parts.len(),
             %upload_id,
             "Presigned multipart upload URLs successfully generated and signed"
         );
 
-        Ok((upload_id, urls))
+        Ok(super::PresignedUpload {
+            upload_id: Some(upload_id),
+            parts,
+        })
     }
 
     /// Prematurely terminates an active S3 multipart upload via explicit abort.

@@ -11,6 +11,7 @@ use bytes::Bytes;
 use futures::Stream;
 use tokio::io::AsyncWrite;
 
+pub use backends::{DownloadPart, PresignedDownload, PresignedUpload, UploadPart};
 pub use error::{Error, ErrorContextExt, Result};
 pub use util::{
     progress::ProgressGuard,
