@@ -15,6 +15,14 @@ pub struct PresignedDownload {
     pub parts: Vec<DownloadPart>,
 }
 
+impl PresignedDownload {
+    /// Returns the total size of the file to be downloaded.
+    #[must_use]
+    pub const fn total_size(&self) -> u64 {
+        self.total_size
+    }
+}
+
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
@@ -37,6 +45,14 @@ pub struct PresignedUpload {
     /// Will be `None` if the file fit in a single chunk (standard `PutObject`).
     pub upload_id: Option<String>,
     pub parts: Vec<UploadPart>,
+}
+
+impl PresignedUpload {
+    /// Calculates the total expected size of the upload by summing the parts.
+    #[must_use]
+    pub fn total_size(&self) -> u64 {
+        self.parts.iter().map(|p| p.expected_size).sum()
+    }
 }
 
 #[derive(Clone, Debug)]
