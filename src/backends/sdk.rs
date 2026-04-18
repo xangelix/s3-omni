@@ -603,13 +603,13 @@ impl SdkOperation {
     #[instrument(skip(self, etags), fields(bucket = %self.bucket, key = %self.key), err)]
     pub async fn complete_presigned_multipart_upload(
         &self,
-        upload_id: &str,
+        upload_id: impl Into<String> + Debug,
         etags: Vec<(i32, String)>,
     ) -> Result<()> {
         let client = self.client.clone();
         let bucket = self.bucket.clone();
         let key = self.key.clone();
-        let upload_id = upload_id.to_string();
+        let upload_id = upload_id.into();
 
         crate::util::retry::with_retry(
             || {
