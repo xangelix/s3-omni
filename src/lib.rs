@@ -62,7 +62,12 @@ pub trait S3Writer: AsyncWrite + Unpin + MaybeSend {
 #[async_trait]
 impl S3Writer for std::io::Cursor<Vec<u8>> {
     async fn size_hint(&mut self, size: u64) -> Result<()> {
-        self.get_mut().reserve(size as usize);
+        self.get_mut()
+            .try_reserve_exact(size as usize)
+            .map_err(|_| Error::Context {
+                context: "Out of memory pre-allocating buffer bounds",
+                source: None,
+            })?;
         Ok(())
     }
 }
@@ -70,7 +75,12 @@ impl S3Writer for std::io::Cursor<Vec<u8>> {
 #[async_trait]
 impl S3Writer for std::io::Cursor<&mut Vec<u8>> {
     async fn size_hint(&mut self, size: u64) -> Result<()> {
-        self.get_mut().reserve(size as usize);
+        self.get_mut()
+            .try_reserve_exact(size as usize)
+            .map_err(|_| Error::Context {
+                context: "Out of memory pre-allocating buffer bounds",
+                source: None,
+            })?;
         Ok(())
     }
 }
