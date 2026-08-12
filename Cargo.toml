@@ -42,7 +42,7 @@ tokio = { version = "1", default-features = false, features = [
     "time",
 ] }
 tokio-util = { version = "0", default-features = false }
-tokio_with_wasm = { version = "0.9", features = [
+tokio_with_wasm = { version = "0.10", features = [
     "macros",
     "rt",
     "rt-multi-thread",
